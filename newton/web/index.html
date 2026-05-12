@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Newton — Current Events</title>
+<style>
+  :root{
+    --bg:#0b1020; --bg-2:#111733; --panel:#141a36; --panel-2:#1a2148;
+    --line:#222a55; --ink:#e7ecff; --ink-dim:#a4adcf; --ink-soft:#7682ad;
+    --accent:#6ea8ff; --accent-2:#9b87ff; --pos:#3ddc97; --neg:#ff6b8a;
+    --warn:#ffc857; --chip:#1f2a59;
+    --sig-procurement:#ff8a3d; --sig-partnerships:#9b87ff; --sig-facilities:#3ddc97;
+    --sig-investments:#ffc857; --sig-products:#5ed7ff; --sig-major:#ff6b8a;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:radial-gradient(1200px 800px at 10% -10%, #1a2050 0%, transparent 60%), radial-gradient(900px 600px at 110% 0%, #2a1a55 0%, transparent 55%), var(--bg);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",system-ui,sans-serif;letter-spacing:.01em}
+  a{color:var(--accent);text-decoration:none}
+  button,select{font:inherit;color:inherit;background:transparent;border:0;cursor:pointer}
+
+  .topbar{display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid var(--line);background:rgba(10,14,32,.7);backdrop-filter:blur(8px);position:sticky;top:0;z-index:5}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.18em}
+  .logo .dot{width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 0 18px var(--accent)}
+  .logo .name{font-size:13px}
+  .logo .sub{font-size:11px;color:var(--ink-soft);letter-spacing:.22em}
+  .tabs{display:flex;gap:4px;margin-left:18px}
+  .tab{padding:7px 14px;border-radius:8px;font-size:12px;letter-spacing:.08em;color:var(--ink-dim);text-transform:uppercase}
+  .tab.active{color:var(--ink);background:linear-gradient(135deg,rgba(110,168,255,.22),rgba(155,135,255,.22));border:1px solid rgba(110,168,255,.5)}
+  .topright{margin-left:auto;display:flex;align-items:center;gap:10px;color:var(--ink-soft);font-size:12px}
+  .live{display:flex;align-items:center;gap:6px;color:var(--pos)}
+  .pulse{width:8px;height:8px;border-radius:50%;background:var(--pos);box-shadow:0 0 0 0 rgba(61,220,151,.7);animation:pulse 1.6s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(61,220,151,.7)}70%{box-shadow:0 0 0 14px rgba(61,220,151,0)}100%{box-shadow:0 0 0 0 rgba(61,220,151,0)}}
+  .llm-status{padding:3px 8px;border-radius:6px;font-size:10px;letter-spacing:.12em;text-transform:uppercase}
+  .llm-status.on{background:rgba(61,220,151,.15);color:var(--pos);border:1px solid rgba(61,220,151,.4)}
+  .llm-status.off{background:rgba(255,107,138,.15);color:var(--neg);border:1px solid rgba(255,107,138,.4)}
+
+  .ownerbar{display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(20,26,54,.85),rgba(17,23,51,.85))}
+  .ownerlabel{font-size:11px;letter-spacing:.18em;color:var(--ink-soft);text-transform:uppercase}
+  .ownerselect{display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--panel);border:1px solid var(--line);border-radius:8px}
+  .ownerselect select{appearance:none;border:0;color:var(--ink);font-weight:600;padding-right:18px;background:transparent;cursor:pointer}
+  .ownerselect::after{content:"▾";color:var(--ink-soft);margin-left:-12px;pointer-events:none}
+  .stat{display:flex;flex-direction:column;gap:2px;padding:0 14px;border-left:1px solid var(--line)}
+  .stat .num{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+  .stat .lbl{font-size:10px;color:var(--ink-soft);letter-spacing:.14em;text-transform:uppercase}
+
+  .grid{display:grid;grid-template-columns:240px 1fr 320px;gap:14px;padding:14px 18px}
+  @media (max-width:1100px){.grid{grid-template-columns:1fr}}
+  .panel{background:linear-gradient(180deg,rgba(20,26,54,.9),rgba(17,23,51,.9));border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .panel h3{margin:0;padding:12px 14px;font-size:12px;letter-spacing:.18em;color:var(--ink-soft);text-transform:uppercase;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+  .panel h3 .hint{color:var(--ink-soft);font-size:10px;letter-spacing:.12em}
+  .panel .body{padding:10px 12px}
+
+  .wl{list-style:none;padding:0;margin:0}
+  .wl li{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:8px;font-size:13px}
+  .wl li:hover{background:var(--panel-2)}
+  .wl li.active{background:linear-gradient(135deg,rgba(110,168,255,.18),rgba(155,135,255,.18));border:1px solid rgba(110,168,255,.4)}
+  .wl .count{font-size:11px;color:var(--ink-soft);background:var(--chip);border-radius:999px;padding:2px 8px;font-variant-numeric:tabular-nums}
+  .filters{display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px}
+  .chip{padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink-dim);font-size:11px;letter-spacing:.04em;cursor:pointer}
+  .chip.on{color:var(--ink);background:linear-gradient(135deg,rgba(110,168,255,.25),rgba(155,135,255,.25));border-color:rgba(110,168,255,.5)}
+
+  .prospect-section{padding:10px 12px}
+  .section-header{display:flex;align-items:center;justify-content:space-between;padding:6px 4px 10px;color:var(--ink-soft);font-size:11px;letter-spacing:.16em;text-transform:uppercase}
+  .pcard{display:grid;grid-template-columns:1fr auto;gap:14px;padding:14px;background:var(--panel-2);border:1px solid var(--line);border-radius:12px;margin-bottom:10px}
+  .pcard.priority{border-left:3px solid var(--warn)}
+  .pcard.cold{border-left:3px solid var(--accent-2)}
+  .ptop{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .pname{font-weight:700;font-size:14px}
+  .badge{font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:2px 8px;border-radius:6px;font-weight:600}
+  .badge.priority{background:rgba(255,200,87,.2);color:var(--warn);border:1px solid rgba(255,200,87,.4)}
+  .badge.cold{background:rgba(155,135,255,.18);color:var(--accent-2);border:1px solid rgba(155,135,255,.4)}
+  .badge.industry{background:var(--chip);color:var(--ink-soft)}
+  .signal{display:inline-flex;align-items:center;gap:6px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:3px 8px;border-radius:6px;font-weight:700}
+  .signal::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+  .signal.procurement{background:rgba(255,138,61,.15);color:var(--sig-procurement);border:1px solid rgba(255,138,61,.35)}
+  .signal.partnerships{background:rgba(155,135,255,.15);color:var(--sig-partnerships);border:1px solid rgba(155,135,255,.35)}
+  .signal.facilities{background:rgba(61,220,151,.12);color:var(--sig-facilities);border:1px solid rgba(61,220,151,.35)}
+  .signal.investments{background:rgba(255,200,87,.15);color:var(--sig-investments);border:1px solid rgba(255,200,87,.35)}
+  .signal.products{background:rgba(94,215,255,.12);color:var(--sig-products);border:1px solid rgba(94,215,255,.35)}
+  .signal.major{background:rgba(255,107,138,.15);color:var(--sig-major);border:1px solid rgba(255,107,138,.35)}
+  .signal.none{background:var(--chip);color:var(--ink-soft);border:1px solid var(--line)}
+  .freshness{font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:2px 8px;border-radius:6px;background:var(--panel);color:var(--ink-soft);border:1px solid var(--line)}
+  .freshness.current{color:var(--pos);border-color:rgba(61,220,151,.4)}
+  .freshness.cold_start{color:var(--accent-2);border-color:rgba(155,135,255,.4)}
+  .freshness.aged_high_signal{color:var(--warn);border-color:rgba(255,200,87,.4)}
+  .ptitle{margin:8px 0 6px;font-size:13.5px;font-weight:600;line-height:1.4}
+  .pexcerpt{color:var(--ink-dim);font-size:12.5px;line-height:1.5}
+  .pmeta{margin-top:8px;display:flex;flex-wrap:wrap;gap:8px;color:var(--ink-soft);font-size:11px;align-items:center}
+  .pmeta .src{padding:2px 7px;border-radius:6px;background:var(--panel);border:1px solid var(--line)}
+  .pactions{display:flex;flex-direction:column;gap:6px;align-items:flex-end;min-width:130px}
+  .btn{padding:5px 10px;border:1px solid var(--line);background:var(--panel);border-radius:8px;color:var(--ink-dim);font-size:11px;letter-spacing:.06em;white-space:nowrap;cursor:pointer}
+  .btn:hover{color:var(--ink);border-color:rgba(110,168,255,.5)}
+  .btn.primary{color:var(--accent)}
+  .btn.alf{color:var(--warn);border-color:rgba(255,200,87,.4)}
+  .btn:disabled{opacity:.5;cursor:wait}
+  .score{font-size:10px;color:var(--ink-soft);font-variant-numeric:tabular-nums;margin-top:2px}
+  .score b{color:var(--ink-dim)}
+
+  .reco-banner{margin:10px 12px;padding:14px;background:linear-gradient(135deg,rgba(155,135,255,.1),rgba(110,168,255,.06));border:1px dashed rgba(155,135,255,.4);border-radius:12px}
+  .reco-banner .title{font-weight:700;font-size:13px}
+  .reco-banner .why{font-size:12px;color:var(--ink-dim);margin-top:4px;line-height:1.5}
+  .rcard{padding:12px;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;margin-bottom:8px}
+  .rcompany{font-weight:700;font-size:13px;margin-bottom:2px}
+  .rmeta{font-size:10.5px;color:var(--ink-soft);display:flex;gap:8px;align-items:center;margin-bottom:6px}
+  .rhead{font-size:12.5px;font-weight:600;line-height:1.35}
+  .rwhy{font-size:11.5px;color:var(--ink-dim);font-style:italic;margin-top:6px;line-height:1.45;border-left:2px solid rgba(155,135,255,.3);padding-left:8px}
+  .rfooter{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
+
+  /* MODAL */
+  .modal-bg{position:fixed;inset:0;background:rgba(11,16,32,.7);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;z-index:100;padding:40px}
+  .modal-bg.show{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;max-width:640px;width:100%;max-height:80vh;overflow:auto;padding:20px}
+  .modal h2{margin:0 0 8px;font-size:18px}
+  .modal .channel-row{display:flex;gap:6px;margin:12px 0}
+  .modal .modal-body{margin:10px 0;padding:14px;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;white-space:pre-wrap;font-family:Georgia,serif;line-height:1.55}
+  .modal .modal-meta{font-size:11px;color:var(--ink-soft);margin-top:8px;line-height:1.5}
+  .modal .modal-actions{display:flex;gap:8px;margin-top:14px;justify-content:flex-end}
+  .modal .close{margin-left:auto;color:var(--ink-soft)}
+
+  .toast{position:fixed;bottom:24px;right:24px;background:var(--panel);border:1px solid var(--pos);border-radius:10px;padding:12px 16px;color:var(--ink);font-size:13px;display:none;animation:slideup .3s;z-index:200}
+  .toast.show{display:block}
+  .toast.err{border-color:var(--neg)}
+  @keyframes slideup{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+  .empty{padding:24px;text-align:center;color:var(--ink-soft);font-size:13px}
+  .loading{padding:24px;text-align:center;color:var(--ink-soft);font-size:13px}
+
+  .footer{padding:14px 18px;color:var(--ink-soft);font-size:11px;letter-spacing:.06em;text-align:center;border-top:1px solid var(--line)}
+  ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">
+    <span class="dot"></span>
+    <span><span class="name">NEWTON</span><br><span class="sub">CURRENT EVENTS</span></span>
+  </div>
+  <div class="tabs">
+    <span class="tab active">Prospects</span>
+    <span class="tab">Newsfeed</span>
+    <span class="tab">Ideas</span>
+    <span class="tab">Settings</span>
+  </div>
+  <div class="topright">
+    <div class="live"><span class="pulse"></span> LIVE</div>
+    <span id="llm-status" class="llm-status off">LLM OFF</span>
+    <div id="clock">—</div>
+  </div>
+</div>
+
+<div class="ownerbar">
+  <span class="ownerlabel">Account owner</span>
+  <div class="ownerselect"><select id="ownerselect"></select></div>
+  <div class="stat"><span class="num" id="stat-total">—</span><span class="lbl">Prospects</span></div>
+  <div class="stat"><span class="num" id="stat-priority">—</span><span class="lbl">Priority</span></div>
+  <div class="stat"><span class="num" id="stat-cold">—</span><span class="lbl">Cold-start</span></div>
+  <div class="stat"><span class="num" id="stat-hits">—</span><span class="lbl">Hits</span></div>
+</div>
+
+<div class="grid">
+
+  <div class="panel">
+    <h3>Watchlists <span class="hint" id="wl-count">—</span></h3>
+    <ul class="wl" id="watchlists"></ul>
+  </div>
+
+  <div class="panel">
+    <h3>Prospect feed <span class="hint" id="feed-owner">—</span></h3>
+    <div class="filters" id="filters">
+      <span class="chip on" data-f="all">All</span>
+      <span class="chip" data-f="procurement">Procurement</span>
+      <span class="chip" data-f="partnerships">Partnerships</span>
+      <span class="chip" data-f="facilities">Facilities</span>
+      <span class="chip" data-f="investments">Investments</span>
+      <span class="chip" data-f="products">Products</span>
+      <span class="chip" data-f="major">Major</span>
+    </div>
+    <div class="prospect-section" id="prospect-feed"><div class="loading">Loading…</div></div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div class="panel">
+      <h3>Recommended <span class="hint">manufacturers in the news</span></h3>
+      <div id="reco-wrap"><div class="loading">Loading…</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- DRAFT MODAL -->
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <h2 id="modal-title">Draft outreach</h2>
+    <div class="channel-row">
+      <span class="chip on" data-ch="linkedin">LinkedIn</span>
+      <span class="chip" data-ch="email">Email</span>
+      <span class="chip" data-ch="phone">Phone</span>
+      <button class="btn close" onclick="closeModal()">Close</button>
+    </div>
+    <div id="modal-subject" style="font-weight:700;margin-bottom:6px"></div>
+    <div class="modal-body" id="modal-body">Click a channel to generate…</div>
+    <div class="modal-meta" id="modal-meta"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="regenerate()">Regenerate</button>
+      <button class="btn primary" onclick="saveIdea()">★ Save as idea</button>
+      <button class="btn alf" onclick="sendToAlf()">→ Send to ALF notes</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="footer">Newton · Current Events · v0.6 · <a href="/docs">API docs</a> · <a href="/healthz">/healthz</a></div>
+
+<script>
+let currentOwner = null;
+let currentFilter = "all";
+let dashboardData = null;
+let draftContext = null;
+
+const $ = sel => document.querySelector(sel);
+
+function toast(msg, err = false){
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.toggle("err", err);
+  t.classList.add("show");
+  setTimeout(()=>t.classList.remove("show"), 3000);
+}
+
+async function api(path, opts = {}){
+  const r = await fetch(path, {headers:{"content-type":"application/json"}, ...opts});
+  if(!r.ok){
+    const text = await r.text();
+    throw new Error(`${r.status}: ${text}`);
+  }
+  return r.json();
+}
+
+async function loadHealth(){
+  try{
+    const h = await api("/healthz");
+    const el = $("#llm-status");
+    el.textContent = h.llm_configured ? "LLM ON" : "LLM OFF";
+    el.classList.toggle("on", h.llm_configured);
+    el.classList.toggle("off", !h.llm_configured);
+  } catch(e){ console.warn("healthz failed", e); }
+}
+
+async function loadOwners(){
+  const r = await api("/current-events");
+  const sel = $("#ownerselect");
+  sel.innerHTML = r.items.map(o => `<option value="${o.id}">${o.name}</option>`).join("");
+  currentOwner = r.items[0].id;
+  return r.items;
+}
+
+async function loadDashboard(){
+  $("#prospect-feed").innerHTML = `<div class="loading">Loading…</div>`;
+  $("#reco-wrap").innerHTML = `<div class="loading">Loading…</div>`;
+  try{
+    dashboardData = await api(`/current-events/${currentOwner}`);
+  } catch(e){
+    $("#prospect-feed").innerHTML = `<div class="empty">Failed to load: ${e.message}</div>`;
+    return;
+  }
+  renderStats();
+  renderWatchlists();
+  renderProspectFeed();
+  renderRecommendations();
+  $("#feed-owner").textContent = "— for " + dashboardData.owner.name;
+}
+
+function renderStats(){
+  $("#stat-total").textContent = dashboardData.stats.total;
+  $("#stat-priority").textContent = dashboardData.stats.priority;
+  $("#stat-cold").textContent = dashboardData.stats.cold_start;
+  $("#stat-hits").textContent = dashboardData.stats.hits;
+}
+
+function renderWatchlists(){
+  const wls = dashboardData.watchlists;
+  $("#wl-count").textContent = wls.length;
+  $("#watchlists").innerHTML = wls.map(w => `
+    <li><span>${w.name}</span><span class="count">${w.entity_count}</span></li>
+  `).join("");
+}
+
+function renderProspectFeed(){
+  const el = $("#prospect-feed");
+  const filtered = dashboardData.prospects.map(p => ({
+    ...p, hits: p.hits.filter(h => currentFilter === "all" || h.signal_category === currentFilter)
+  })).filter(p => p.hits.length > 0);
+
+  if(filtered.length === 0){
+    el.innerHTML = `
+      <div class="section-header"><span>${currentFilter === "all" ? "Quiet right now" : "No matches for this filter"}</span></div>
+      <div class="reco-banner">
+        <div class="title">No fresh signals on this owner's prospects.</div>
+        <div class="why">Newton's recommending manufacturers in the news on the right — companies not yet on anyone's list.</div>
+      </div>
+    `;
+    return;
+  }
+
+  const priority = filtered.filter(p => p.priority);
+  const cold = filtered.filter(p => !p.priority && p.is_cold_start);
+  const standard = filtered.filter(p => !p.priority && !p.is_cold_start);
+
+  let html = "";
+  const section = (title, list) => {
+    if(!list.length) return "";
+    const hitCount = list.reduce((n,p) => n + p.hits.length, 0);
+    return `<div class="section-header"><span>${title}</span><span>${hitCount}</span></div>` + list.map(renderProspect).join("");
+  };
+  html += section("Priority accounts", priority);
+  html += section("Cold-start (recently added)", cold);
+  html += section("Active prospects", standard);
+  el.innerHTML = html;
+}
+
+function renderProspect(p){
+  return p.hits.map((h, idx) => `
+    <div class="pcard ${p.priority?"priority":p.is_cold_start?"cold":""}">
+      <div>
+        <div class="ptop">
+          <span class="pname">${p.name}</span>
+          ${p.priority ? '<span class="badge priority">★ Priority</span>' : ''}
+          ${p.is_cold_start ? '<span class="badge cold">Cold-start</span>' : ''}
+          ${p.industry ? `<span class="badge industry">${p.industry}</span>` : ''}
+          <span class="signal ${h.signal_category}">${h.signal_category}</span>
+          <span class="freshness ${h.freshness_status}">${h.freshness_status.replace(/_/g," ")}</span>
+        </div>
+        <div class="ptitle">${escapeHtml(h.title)}</div>
+        <div class="pexcerpt">${escapeHtml(h.excerpt || "")}</div>
+        <div class="pmeta">
+          <span class="src">${h.source}</span>
+          <span>${h.age || ""} ago</span>
+          ${p.city ? `<span>· ${p.city}${p.exec?" · "+p.exec:""}</span>` : ''}
+          ${h.reason ? `<span>· <i>${escapeHtml(h.reason)}</i></span>` : ''}
+        </div>
+      </div>
+      <div class="pactions">
+        <button class="btn primary" onclick="openDraft('${p.id}', ${idx})">Draft outreach</button>
+        <button class="btn" onclick="saveQuickIdea('${p.id}', ${idx})">★ Save idea</button>
+        <button class="btn alf" onclick="quickAlfNote('${p.id}', ${idx})">→ ALF notes</button>
+        <div class="score"><b>${(h.score*100).toFixed(0)}</b>/100</div>
+      </div>
+    </div>
+  `).join("");
+}
+
+function renderRecommendations(){
+  const recos = dashboardData.recommendations;
+  const quiet = dashboardData.prospects.every(p => p.hits.length === 0);
+  const banner = quiet
+    ? `<div class="reco-banner" style="margin:10px 12px;"><div class="title">Quiet day on this owner's list.</div><div class="why">Manufacturers below are in the news with active buying signals and aren't on anyone's list yet. Worth a first reach-out.</div></div>`
+    : `<div class="reco-banner" style="margin:10px 12px;"><div class="title">Manufacturers worth a first look</div><div class="why">In the news with high-signal categories. Not on anyone's list yet.</div></div>`;
+  $("#reco-wrap").innerHTML = banner + `<div class="body">` + recos.map(r => `
+    <div class="rcard">
+      <div class="rcompany">${escapeHtml(r.company_name)}</div>
+      <div class="rmeta">
+        <span class="signal ${r.signal_category}">${r.signal_category}</span>
+        <span>${r.industry}</span><span>·</span><span>${r.age_days}d ago</span>
+      </div>
+      <div class="rhead">${escapeHtml(r.headline)}</div>
+      <div class="rwhy">${escapeHtml(r.rationale)}</div>
+      <div class="rfooter">
+        <span class="score"><b>${(r.score*100).toFixed(0)}</b>/100</span>
+        <button class="btn primary">+ Add to my list</button>
+      </div>
+    </div>
+  `).join("") + `</div>`;
+}
+
+// ---- Actions ----
+function openDraft(prospectId, hitIdx){
+  const prospect = dashboardData.prospects.find(p => p.id === prospectId);
+  const hit = prospect.hits[hitIdx];
+  draftContext = {prospect, hit, channel: "linkedin", lastDraft: null};
+  $("#modal-title").textContent = `Draft outreach — ${prospect.name}`;
+  $("#modal-body").textContent = "Generating…";
+  $("#modal-subject").textContent = "";
+  $("#modal-meta").textContent = "";
+  $("#modal").classList.add("show");
+  // reset channel chips
+  document.querySelectorAll("#modal .channel-row .chip").forEach(c => c.classList.remove("on"));
+  document.querySelector("#modal .channel-row .chip[data-ch='linkedin']").classList.add("on");
+  generateDraft();
+}
+
+document.querySelector("#modal .channel-row").addEventListener("click", e => {
+  if(!e.target.dataset.ch) return;
+  document.querySelectorAll("#modal .channel-row .chip").forEach(c => c.classList.remove("on"));
+  e.target.classList.add("on");
+  draftContext.channel = e.target.dataset.ch;
+  generateDraft();
+});
+
+async function generateDraft(){
+  if(!draftContext) return;
+  const {prospect, hit, channel} = draftContext;
+  $("#modal-body").textContent = "Generating…";
+  $("#modal-subject").textContent = "";
+  $("#modal-meta").textContent = "";
+  try{
+    const draft = await api(`/prospects/${prospect.id}/draft-outreach`, {
+      method: "POST",
+      body: JSON.stringify({channel, signal: {
+        title: hit.title, excerpt: hit.excerpt,
+        signal_category: hit.signal_category, reason: hit.reason,
+        key_phrases: hit.matched_cues || [],
+      }}),
+    });
+    draftContext.lastDraft = draft;
+    if(draft.subject) $("#modal-subject").textContent = "Subject: " + draft.subject;
+    $("#modal-body").textContent = draft.body + (draft.cta ? "\n\n" + draft.cta : "");
+    $("#modal-meta").innerHTML = `
+      Voice score: <b>${(draft.voice_score*100).toFixed(0)}/100</b>
+      ${draft.voice_check_notes ? ' · ' + escapeHtml(draft.voice_check_notes) : ''}
+      ${draft.is_stub ? ' · <span style="color:var(--neg)">stub (no LLM key)</span>' : ''}
+    `;
+  } catch(e){
+    $("#modal-body").textContent = "Draft generation failed: " + e.message;
+  }
+}
+
+function regenerate(){ generateDraft(); }
+function closeModal(){ $("#modal").classList.remove("show"); draftContext = null; }
+
+async function saveIdea(){
+  if(!draftContext) return;
+  const {prospect, hit, lastDraft} = draftContext;
+  try{
+    await api("/ideas", {
+      method: "POST",
+      body: JSON.stringify({
+        owner_note: `${prospect.name}: ${hit.title}`,
+        tags: [hit.signal_category, "from_draft"],
+      }),
+    });
+    toast("Saved to ideas vault.");
+  } catch(e){ toast("Save failed: " + e.message, true); }
+}
+
+async function saveQuickIdea(prospectId, hitIdx){
+  const prospect = dashboardData.prospects.find(p => p.id === prospectId);
+  const hit = prospect.hits[hitIdx];
+  try{
+    await api("/ideas", {
+      method: "POST",
+      body: JSON.stringify({owner_note: `${prospect.name}: ${hit.title}`,
+                            tags: [hit.signal_category]}),
+    });
+    toast("Saved to ideas vault.");
+  } catch(e){ toast("Save failed: " + e.message, true); }
+}
+
+async function sendToAlf(){
+  if(!draftContext) return;
+  const {prospect, hit, lastDraft} = draftContext;
+  try{
+    await api("/alf/notes", {
+      method: "POST",
+      body: JSON.stringify({
+        prospect_id: prospect.id, owner_id: prospect.owner_id,
+        title: `[Newton] ${hit.title}`,
+        body: (lastDraft && lastDraft.body) || `${hit.signal_category}: ${hit.title}\n${hit.excerpt}`,
+        source_url: hit.url || null,
+      }),
+    });
+    toast("Queued to ALF (drains on integration).");
+  } catch(e){ toast("ALF send failed: " + e.message, true); }
+}
+
+async function quickAlfNote(prospectId, hitIdx){
+  const prospect = dashboardData.prospects.find(p => p.id === prospectId);
+  const hit = prospect.hits[hitIdx];
+  try{
+    await api("/alf/notes", {
+      method: "POST",
+      body: JSON.stringify({
+        prospect_id: prospect.id, owner_id: prospect.owner_id,
+        title: `[Newton] ${hit.title}`,
+        body: `${hit.signal_category}: ${hit.title}\n${hit.excerpt}`,
+        source_url: hit.url || null,
+      }),
+    });
+    toast("Queued to ALF.");
+  } catch(e){ toast("Failed: " + e.message, true); }
+}
+
+// ---- Wiring ----
+document.getElementById("ownerselect").addEventListener("change", e => {
+  currentOwner = e.target.value;
+  loadDashboard();
+});
+
+document.getElementById("filters").addEventListener("click", e => {
+  if(!e.target.classList.contains("chip")) return;
+  document.querySelectorAll("#filters .chip").forEach(c => c.classList.remove("on"));
+  e.target.classList.add("on");
+  currentFilter = e.target.dataset.f;
+  renderProspectFeed();
+});
+
+function tick(){
+  const d = new Date();
+  $("#clock").textContent = d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+}
+setInterval(tick, 30000); tick();
+
+function escapeHtml(s){
+  return (s||"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+// Refresh every 60s
+setInterval(loadDashboard, 60000);
+
+// Boot
+(async () => {
+  await loadHealth();
+  await loadOwners();
+  await loadDashboard();
+})();
+</script>
+</body>
+</html>

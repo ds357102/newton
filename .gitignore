@@ -1,0 +1,25 @@
+# Local Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+pytest-cache-files-*
+
+# Local config / secrets
+.env
+
+# Local runner output
+newton_run.json
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor noise
+.idea/
+.vscode/
+*.swp
+
+# Don't ship the demo seed in deployments where you have real data
+# (uncomment if you go that route)
+# newton/data/seed_hits.json
