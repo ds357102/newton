@@ -218,3 +218,73 @@ async def healthz():
         "cached_owners": len(prospect_source._owners),
         "cached_hits": hits_store.total_count(),
     }
+
+
+@app.get("/debug/streamer")
+async def debug_streamer():
+    """Diagnostic: run a quick probe of the RSS pipeline to see what's working."""
+    from .prospects.source import prospect_source
+    from .store import hits as hits_store
+    from workers.streamer import (
+        fetch_google_news_for_query, fetch_industry_feed, fetch_reddit_feed,
+        attribute_to_prospects, INDUSTRY_FEEDS, REDDIT_FEEDS,
+    )
+    prospects = await prospect_source.all()
+    priority = [p for p in prospects if p.priority]
+
+    results = {
+        "total_prospects": len(prospects),
+        "priority_prospects": len(priority),
+        "sample_priority_names": [p.name for p in priority[:10]],
+        "cached_hits_total": hits_store.total_count(),
+    }
+
+    # Test one Google News fetch with a priority prospect
+    if priority:
+        test_p = priority[0]
+        queries = test_p.query_bundle()[:2]
+        results["google_news_test"] = {
+            "prospect": test_p.name,
+            "queries": queries,
+        }
+        gnews_items = []
+        for q in queries:
+            items = fetch_google_news_for_query(q)
+            gnews_items.extend(items)
+        results["google_news_test"]["items_fetched"] = len(gnews_items)
+        if gnews_items:
+            results["google_news_test"]["sample_titles"] = [
+                it.get("title", "")[:100] for it in gnews_items[:5]
+            ]
+
+    # Test one industry feed
+    if INDUSTRY_FEEDS:
+        feed_name, feed_url = INDUSTRY_FEEDS[0]
+        industry_items = fetch_industry_feed(feed_name, feed_url)
+        attributed = []
+        for it in industry_items:
+            matches = attribute_to_prospects(it, prospects)
+            if matches:
+                attributed.append({
+                    "title": it.get("title", "")[:100],
+                    "matched": [m.name for m in matches],
+                })
+        results["industry_test"] = {
+            "feed": feed_name,
+            "items_fetched": len(industry_items),
+            "items_attributed": len(attributed),
+            "sample_titles": [it.get("title", "")[:100] for it in industry_items[:5]],
+            "attributed_items": attributed[:5],
+        }
+
+    # Test one Reddit feed
+    if REDDIT_FEEDS:
+        rname, rurl = REDDIT_FEEDS[0]
+        reddit_items = fetch_reddit_feed(rname, rurl)
+        results["reddit_test"] = {
+            "feed": rname,
+            "items_fetched": len(reddit_items),
+            "sample_titles": [it.get("title", "")[:100] for it in reddit_items[:3]],
+        }
+
+    return results
