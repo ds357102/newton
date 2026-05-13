@@ -166,11 +166,19 @@ class AlfProspectSource:
 
         owners_by_id: dict[str, Owner] = {}
         prospects: list[Prospect] = []
+        skipped_junk = 0
         for r in raw:
             if not isinstance(r, dict):
                 continue
             pid = str(r.get("id") or r.get("_id") or r.get("uuid") or "").strip()
             if not pid:
+                continue
+            # Junk filter: ALF's response contains placeholder records where
+            # name == id (no real company name was ever entered). Skip them so
+            # they don't pollute counts or owner lists.
+            raw_name = r.get("name") or r.get("company_name") or r.get("account_name")
+            if not raw_name or str(raw_name).strip() == pid:
+                skipped_junk += 1
                 continue
             owner_id = str(
                 r.get("owner_id") or r.get("ownerId") or r.get("assigned_to") or
@@ -225,7 +233,10 @@ class AlfProspectSource:
 
         self._owners = list(owners_by_id.values())
         self._sample = prospects
-        log.info(f"ALF sync OK: {len(prospects)} prospects across {len(self._owners)} owners")
+        log.info(
+            f"ALF sync OK: {len(prospects)} prospects across {len(self._owners)} owners"
+            + (f" (skipped {skipped_junk} junk records where name == id)" if skipped_junk else "")
+        )
         return len(prospects)
 
 
