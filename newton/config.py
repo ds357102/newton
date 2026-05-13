@@ -23,5 +23,11 @@ class Settings(BaseSettings):
 
     owner_email: str | None = None
 
+    # ALF integration — when both are set, Newton syncs prospects from ALF.
+    alf_api_url: str | None = None        # e.g. https://alf-2-ds357102s-projects.vercel.app/api/prospects
+    alf_clients_url: str | None = None    # optional, e.g. .../api/clients
+    newton_api_token: str | None = None   # bearer token Newton presents to ALF
+    alf_sync_interval_sec: int = 300      # how often Newton refreshes from ALF
+
 
 settings = Settings()

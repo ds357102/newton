@@ -18,6 +18,28 @@ from .api import (
 log = logging.getLogger("newton.main")
 
 
+async def _background_alf_sync():
+    """Refresh prospects from ALF on startup, then every settings.alf_sync_interval_sec.
+    Cheap: one HTTPS call to ALF. Safe to run alongside everything else."""
+    if not settings.alf_api_url or not settings.newton_api_token:
+        log.info("ALF sync disabled (set ALF_API_URL + NEWTON_API_TOKEN to enable)")
+        return
+    from .prospects.source import prospect_source
+    log.info(f"ALF sync starting (every {settings.alf_sync_interval_sec}s)")
+    while True:
+        try:
+            n = await prospect_source.refresh_from_alf()
+            log.info(f"ALF sync cycle: {n} prospects in cache")
+        except asyncio.CancelledError:
+            return
+        except Exception as e:
+            log.exception(f"ALF sync failed: {e}")
+        try:
+            await asyncio.sleep(settings.alf_sync_interval_sec)
+        except asyncio.CancelledError:
+            return
+
+
 async def _background_streamer():
     """In-process streamer loop. Runs every NEWTON_STREAM_INTERVAL_SEC seconds.
 
@@ -55,15 +77,28 @@ async def _background_streamer():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = asyncio.create_task(_background_streamer())
+    # Best-effort first sync from ALF before yielding so the UI loads with real
+    # prospects on the very first request, not the stub list.
+    if settings.alf_api_url and settings.newton_api_token:
+        try:
+            from .prospects.source import prospect_source
+            n = await prospect_source.refresh_from_alf()
+            log.info(f"ALF initial sync at startup: {n} prospects loaded")
+        except Exception as e:
+            log.warning(f"ALF initial sync failed: {e}")
+
+    streamer_task = asyncio.create_task(_background_streamer())
+    alf_task = asyncio.create_task(_background_alf_sync())
     try:
         yield
     finally:
-        task.cancel()
-        try:
-            await task
-        except (asyncio.CancelledError, Exception):
-            pass
+        for t in (streamer_task, alf_task):
+            t.cancel()
+        for t in (streamer_task, alf_task):
+            try:
+                await t
+            except (asyncio.CancelledError, Exception):
+                pass
 
 
 app = FastAPI(title="Newton — Current Events", version="0.6.0", lifespan=lifespan)
@@ -107,11 +142,15 @@ async def root():
 @app.get("/healthz")
 async def healthz():
     from .store import hits as hits_store
+    from .prospects.source import prospect_source
     return {
         "ok": True,
         "service": "newton",
         "version": app.version,
         "env": settings.env,
         "llm_configured": bool(settings.anthropic_api_key),
+        "alf_configured": bool(settings.alf_api_url and settings.newton_api_token),
+        "cached_prospects": len(prospect_source._sample),
+        "cached_owners": len(prospect_source._owners),
         "cached_hits": hits_store.total_count(),
     }

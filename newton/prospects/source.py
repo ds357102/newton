@@ -33,6 +33,7 @@ class Prospect:
     known_execs: list[str] = field(default_factory=list)
     facility_cities: list[str] = field(default_factory=list)
     industry: str | None = None
+    status: str = "open"  # open | client | closed_won | closed_lost | other
     archive_url_hashes: set[str] = field(default_factory=set)
 
     @property
@@ -134,6 +135,107 @@ class AlfProspectSource:
 
     async def get(self, prospect_id: str) -> Prospect | None:
         return next((p for p in self._sample if p.id == prospect_id), None)
+
+    async def by_status(self, owner_id: str | None, status: str | None) -> list[Prospect]:
+        items = self._sample if owner_id is None else [p for p in self._sample if p.owner_id == owner_id]
+        if status:
+            items = [p for p in items if (p.status or "open").lower() == status.lower()]
+        return items
+
+    # ---- v0.7: live sync from ALF's /api/prospects ----
+    async def refresh_from_alf(self) -> int:
+        """Pull fresh prospect data from ALF and replace the in-memory cache.
+
+        Returns the number of prospects loaded. Returns 0 (and keeps existing
+        data) if ALF is not configured or unreachable.
+        """
+        import logging
+        log = logging.getLogger("newton.prospects.source")
+        try:
+            from .alf_client import client as alf
+        except Exception as e:
+            log.warning(f"ALF client import failed: {e}")
+            return 0
+        if not alf.is_configured():
+            return 0
+
+        raw = await alf.fetch_all()
+        if not raw:
+            log.info("ALF fetch returned no data; keeping existing cache")
+            return 0
+
+        owners_by_id: dict[str, Owner] = {}
+        prospects: list[Prospect] = []
+        for r in raw:
+            if not isinstance(r, dict):
+                continue
+            pid = str(r.get("id") or r.get("_id") or r.get("uuid") or "").strip()
+            if not pid:
+                continue
+            owner_id = str(
+                r.get("owner_id") or r.get("ownerId") or r.get("assigned_to") or
+                r.get("assignedTo") or r.get("rep_id") or r.get("owner") or "o_unknown"
+            )
+            owner_name = (
+                r.get("owner_name") or r.get("ownerName") or r.get("assignee_name") or
+                r.get("rep_name") or owner_id
+            )
+            if owner_id not in owners_by_id:
+                owners_by_id[owner_id] = Owner(
+                    id=owner_id, name=owner_name,
+                    email=r.get("owner_email") or r.get("ownerEmail"),
+                )
+            added_at = _parse_ts(r.get("added_at") or r.get("addedAt") or r.get("created_at") or r.get("createdAt"))
+            last_touch_at = _parse_ts(
+                r.get("last_touch_at") or r.get("lastTouchAt") or
+                r.get("last_contact") or r.get("lastContact") or r.get("last_activity_at")
+            )
+            status_raw = (r.get("status") or "open")
+            status = str(status_raw).lower().strip() if status_raw is not None else "open"
+            priority = bool(
+                r.get("priority") or r.get("is_priority") or r.get("isPriority") or
+                status == "priority"
+            )
+            # Domains / cities / execs may be string or list
+            def _aslist(v):
+                if not v: return []
+                return v if isinstance(v, list) else [str(v)]
+            domains = _aslist(r.get("domain")) + _aslist(r.get("domains"))
+            cities = _aslist(r.get("city")) + _aslist(r.get("facility_cities")) + _aslist(r.get("cities"))
+            execs  = _aslist(r.get("key_exec")) + _aslist(r.get("known_execs")) + _aslist(r.get("execs"))
+
+            prospects.append(Prospect(
+                id=pid,
+                owner_id=owner_id,
+                name=str(r.get("name") or r.get("company_name") or r.get("account_name") or pid),
+                priority=priority,
+                added_at=added_at or (datetime.utcnow() - timedelta(days=30)),
+                last_touch_at=last_touch_at,
+                dba_aliases=_aslist(r.get("dba_aliases") or r.get("aliases")),
+                domains=list(dict.fromkeys([d for d in domains if d])),
+                known_execs=list(dict.fromkeys([e for e in execs if e])),
+                facility_cities=list(dict.fromkeys([c for c in cities if c])),
+                industry=r.get("industry"),
+                status=status,
+            ))
+
+        if not prospects:
+            log.warning("ALF returned data but no parseable prospect records; cache unchanged")
+            return 0
+
+        self._owners = list(owners_by_id.values())
+        self._sample = prospects
+        log.info(f"ALF sync OK: {len(prospects)} prospects across {len(self._owners)} owners")
+        return len(prospects)
+
+
+def _parse_ts(val) -> datetime | None:
+    if not val: return None
+    if isinstance(val, datetime): return val
+    try:
+        return datetime.fromisoformat(str(val).replace("Z", "+00:00")).replace(tzinfo=None)
+    except Exception:
+        return None
 
 
 prospect_source = AlfProspectSource()

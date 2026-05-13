@@ -213,7 +213,12 @@
 <div class="footer">Newton · Current Events · v0.6 · <a href="/docs">API docs</a> · <a href="/healthz">/healthz</a></div>
 
 <script>
-let currentOwner = null;
+// URL params: ?owner_id=X auto-picks the owner & hides the picker (for ALF iframe embeds).
+//             ?status=open  restricts the prospect feed to that status.
+const URL_PARAMS = new URLSearchParams(window.location.search);
+const FORCED_OWNER = URL_PARAMS.get("owner_id");
+const STATUS_FILTER = URL_PARAMS.get("status");
+let currentOwner = FORCED_OWNER || null;
 let currentFilter = "all";
 let dashboardData = null;
 let draftContext = null;
@@ -250,16 +255,28 @@ async function loadHealth(){
 async function loadOwners(){
   const r = await api("/current-events");
   const sel = $("#ownerselect");
-  sel.innerHTML = r.items.map(o => `<option value="${o.id}">${o.name}</option>`).join("");
-  currentOwner = r.items[0].id;
+  if (FORCED_OWNER) {
+    // Embedded mode (ALF iframe): show this owner only, hide the picker chrome.
+    const forced = r.items.find(o => o.id === FORCED_OWNER) || {id: FORCED_OWNER, name: FORCED_OWNER};
+    sel.innerHTML = `<option value="${forced.id}">${forced.name}</option>`;
+    sel.disabled = true;
+    const ownerBar = document.querySelector(".ownerbar");
+    if (ownerBar) ownerBar.style.opacity = "0.85";
+    currentOwner = forced.id;
+  } else {
+    sel.innerHTML = r.items.map(o => `<option value="${o.id}">${o.name}</option>`).join("");
+    currentOwner = r.items.length ? r.items[0].id : null;
+  }
   return r.items;
 }
 
 async function loadDashboard(){
+  if (!currentOwner) return;
   $("#prospect-feed").innerHTML = `<div class="loading">Loading…</div>`;
   $("#reco-wrap").innerHTML = `<div class="loading">Loading…</div>`;
+  const qs = STATUS_FILTER ? `?status=${encodeURIComponent(STATUS_FILTER)}` : "";
   try{
-    dashboardData = await api(`/current-events/${currentOwner}`);
+    dashboardData = await api(`/current-events/${encodeURIComponent(currentOwner)}${qs}`);
   } catch(e){
     $("#prospect-feed").innerHTML = `<div class="empty">Failed to load: ${e.message}</div>`;
     return;
