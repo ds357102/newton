@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import os
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -13,6 +14,15 @@ from .config import settings
 from .api import (
     ticker, feed, watchlists, ideas, automation,
     prospects, recommendations, voice, alf_actions, dashboard,
+)
+
+# Configure logging BEFORE anything else — uvicorn only sets up its own loggers,
+# so newton.* loggers need a handler to route to stdout.
+logging.basicConfig(
+    level=os.environ.get("NEWTON_LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    stream=sys.stdout,
+    force=True,
 )
 
 log = logging.getLogger("newton.main")
@@ -92,25 +102,32 @@ async def _background_streamer():
     in a separate service against a shared volume or Redis-backed store.
     """
     if os.environ.get("NEWTON_DISABLE_INPROCESS_STREAMER"):
+        print("[NEWTON] in-process streamer disabled by env", flush=True)
         log.info("in-process streamer disabled by env")
         return
     try:
         from workers.streamer import cycle, persist, INTERVAL
         from .store import hits as hits_store
+        print(f"[NEWTON] streamer imported OK (interval={INTERVAL}s)", flush=True)
     except Exception as e:
+        print(f"[NEWTON] ERROR: streamer import failed: {e}", flush=True)
         log.warning(f"streamer import failed; skipping background loop: {e}")
         return
 
+    print(f"[NEWTON] streamer starting — scanning every {INTERVAL}s", flush=True)
     log.info(f"in-process streamer starting (interval={INTERVAL}s)")
     while True:
         try:
             new_hits = await cycle()
+            total = sum(len(v) for v in new_hits.values())
+            print(f"[NEWTON] cycle complete: {total} hits found", flush=True)
             hits_store.replace_all(new_hits)
             persist(new_hits)
         except asyncio.CancelledError:
             log.info("in-process streamer cancelled cleanly")
             return
         except Exception as e:
+            print(f"[NEWTON] ERROR: cycle failed: {e}", flush=True)
             log.exception(f"streamer cycle failed: {e}")
         try:
             await asyncio.sleep(INTERVAL)
@@ -126,9 +143,13 @@ async def lifespan(app: FastAPI):
         try:
             from .prospects.source import prospect_source
             n = await prospect_source.refresh_from_alf()
+            print(f"[NEWTON] ALF sync: {n} prospects loaded", flush=True)
             log.info(f"ALF initial sync at startup: {n} prospects loaded")
         except Exception as e:
+            print(f"[NEWTON] ALF sync FAILED: {e}", flush=True)
             log.warning(f"ALF initial sync failed: {e}")
+    else:
+        print(f"[NEWTON] ALF sync disabled (alf_api_url={settings.alf_api_url!r}, token={'set' if settings.newton_api_token else 'unset'})", flush=True)
 
     streamer_task = asyncio.create_task(_background_streamer())
     alf_task = asyncio.create_task(_background_alf_sync())
