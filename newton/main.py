@@ -18,26 +18,69 @@ from .api import (
 log = logging.getLogger("newton.main")
 
 
+def _local_tz():
+    """Resolve the timezone for the daily sync schedule. Falls back to UTC."""
+    tz_name = os.environ.get("NEWTON_SYNC_TIMEZONE", "America/New_York")
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo(tz_name), tz_name
+    except Exception as e:
+        log.warning(f"timezone {tz_name!r} not loadable; falling back to UTC: {e}")
+        from datetime import timezone
+        return timezone.utc, "UTC"
+
+
+def _sync_hours() -> list[int]:
+    """Local hours-of-day to run the scheduled sync at. Default: 7am + 12pm."""
+    raw = os.environ.get("NEWTON_SYNC_HOURS_LOCAL", "7,12")
+    try:
+        return sorted({int(h.strip()) for h in raw.split(",") if h.strip()})
+    except Exception:
+        return [7, 12]
+
+
 async def _background_alf_sync():
-    """Refresh prospects from ALF on startup, then every settings.alf_sync_interval_sec.
-    Cheap: one HTTPS call to ALF. Safe to run alongside everything else."""
+    """Refresh prospects from ALF on a daily schedule.
+
+    Default schedule: first thing each morning (7am local) and again at noon
+    (12pm local). Plus an initial sync at process startup (handled in the
+    lifespan before yield), so a fresh deploy doesn't wait until 7am to populate.
+
+    Configure via:
+      NEWTON_SYNC_HOURS_LOCAL=7,12       # comma list of local hours
+      NEWTON_SYNC_TIMEZONE=America/New_York
+    """
     if not settings.alf_api_url or not settings.newton_api_token:
         log.info("ALF sync disabled (set ALF_API_URL + NEWTON_API_TOKEN to enable)")
         return
+    from datetime import datetime, timedelta
     from .prospects.source import prospect_source
-    log.info(f"ALF sync starting (every {settings.alf_sync_interval_sec}s)")
+
+    tz, tz_name = _local_tz()
+    hours = _sync_hours()
+    log.info(f"ALF sync schedule: hours={hours} timezone={tz_name} (+ startup)")
+
     while True:
+        now = datetime.now(tz)
+        # Build today's remaining sync times + first slot tomorrow
+        candidates = [now.replace(hour=h, minute=0, second=0, microsecond=0) for h in hours]
+        future = [c for c in candidates if c > now]
+        if future:
+            next_sync = min(future)
+        else:
+            next_sync = (now.replace(hour=hours[0], minute=0, second=0, microsecond=0)
+                         + timedelta(days=1))
+        delay = max(1.0, (next_sync - now).total_seconds())
+        log.info(f"next ALF sync at {next_sync.isoformat()} (in {int(delay)}s)")
+        try:
+            await asyncio.sleep(delay)
+        except asyncio.CancelledError:
+            return
         try:
             n = await prospect_source.refresh_from_alf()
-            log.info(f"ALF sync cycle: {n} prospects in cache")
-        except asyncio.CancelledError:
-            return
+            log.info(f"scheduled ALF sync: {n} prospects in cache")
         except Exception as e:
-            log.exception(f"ALF sync failed: {e}")
-        try:
-            await asyncio.sleep(settings.alf_sync_interval_sec)
-        except asyncio.CancelledError:
-            return
+            log.exception(f"scheduled ALF sync failed: {e}")
 
 
 async def _background_streamer():
