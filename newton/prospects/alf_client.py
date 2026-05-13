@@ -53,13 +53,19 @@ class AlfApiClient:
             log.warning(f"ALF GET {url} failed: {e}")
             return None
 
-        # Be liberal with response shape. Accept either a bare list or a wrapped object.
+        # Be liberal with response shape. Accept a bare list, or a wrapped
+        # object with a list under one of these common keys.
         if isinstance(data, list):
             return data
         if isinstance(data, dict):
-            for key in ("items", "prospects", "clients", "data", "results"):
+            for key in ("records", "items", "prospects", "clients", "data", "results", "accounts"):
                 if key in data and isinstance(data[key], list):
                     return data[key]
+            # Last-resort fallback: take the first list-valued key.
+            for key, val in data.items():
+                if isinstance(val, list) and val and isinstance(val[0], dict):
+                    log.info(f"ALF response: using fallback key {key!r} with {len(val)} records")
+                    return val
         log.warning(f"ALF response shape unexpected at {url}: top-level keys = {list(data)[:6] if isinstance(data, dict) else type(data).__name__}")
         return None
 
