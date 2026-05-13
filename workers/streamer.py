@@ -196,7 +196,13 @@ def fetch_reddit_feed(name: str, url: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 def attribute_to_prospects(item: dict, prospects: list[Prospect]) -> list[Prospect]:
     """Return prospects whose name / aliases / domains appear in the item text.
-    Many industry articles mention multiple companies — attribute to each."""
+    Many industry articles mention multiple companies — attribute to each.
+
+    Uses word-boundary matching for short terms (< 8 chars) to avoid false
+    positives like 'Price' matching inside 'prices' or 'Seco' in 'second'.
+    Longer terms use substring matching since they're unlikely to collide.
+    """
+    import re
     text = f"{item.get('title','')} {item.get('excerpt','')}".lower()
     matches = []
     for p in prospects:
@@ -205,9 +211,16 @@ def attribute_to_prospects(item: dict, prospects: list[Prospect]) -> list[Prospe
             t_low = (t or "").lower().strip()
             if not t_low or len(t_low) < 4:
                 continue
-            if t_low in text:
-                matches.append(p)
-                break
+            # For short terms, require word boundaries to avoid substring false positives
+            if len(t_low) < 8:
+                pattern = r'\b' + re.escape(t_low) + r'\b'
+                if re.search(pattern, text):
+                    matches.append(p)
+                    break
+            else:
+                if t_low in text:
+                    matches.append(p)
+                    break
     return matches
 
 
