@@ -264,8 +264,14 @@ async def cycle() -> dict[str, list[dict]]:
                 continue
             new_hits[p.id].append(_hit_dict(hit, item.get("source_name", "rss")))
 
-    # 1) Per-prospect Google News fetches
-    for p in prospects:
+    # 1) Per-prospect Google News fetches — PRIORITY PROSPECTS ONLY
+    #    With 3,695 prospects × 3 queries each, scanning all would take hours.
+    #    Priority prospects get dedicated Google News searches.
+    #    Non-priority prospects still get coverage via industry/Reddit attribution.
+    priority_prospects = [p for p in prospects if p.priority]
+    log.info(f"  google-news: scanning {len(priority_prospects)} priority prospects "
+             f"(skipping {len(prospects) - len(priority_prospects)} non-priority)")
+    for p in priority_prospects:
         for q in p.query_bundle()[:3]:
             for it in fetch_google_news_for_query(q):
                 await process_item(it, [p])
