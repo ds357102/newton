@@ -180,14 +180,23 @@ class AlfProspectSource:
             if not raw_name or str(raw_name).strip() == pid:
                 skipped_junk += 1
                 continue
-            owner_id = str(
-                r.get("owner_id") or r.get("ownerId") or r.get("assigned_to") or
-                r.get("assignedTo") or r.get("rep_id") or r.get("owner") or "o_unknown"
+            # ALF returns owner_id: null for genuinely unassigned accounts.
+            # Distinguish "unassigned" from "missing field" so the UI shows a
+            # clean "Unassigned" bucket instead of an opaque "o_unknown".
+            raw_owner = (
+                r.get("owner_id") if "owner_id" in r else
+                r.get("ownerId") or r.get("assigned_to") or r.get("assignedTo") or
+                r.get("rep_id") or r.get("owner")
             )
-            owner_name = (
-                r.get("owner_name") or r.get("ownerName") or r.get("assignee_name") or
-                r.get("rep_name") or owner_id
-            )
+            if not raw_owner:
+                owner_id = "unassigned"
+                owner_name = "Unassigned"
+            else:
+                owner_id = str(raw_owner)
+                owner_name = (
+                    r.get("owner_name") or r.get("ownerName") or
+                    r.get("assignee_name") or r.get("rep_name") or owner_id
+                )
             if owner_id not in owners_by_id:
                 owners_by_id[owner_id] = Owner(
                     id=owner_id, name=owner_name,
@@ -198,8 +207,11 @@ class AlfProspectSource:
                 r.get("last_touch_at") or r.get("lastTouchAt") or
                 r.get("last_contact") or r.get("lastContact") or r.get("last_activity_at")
             )
-            status_raw = (r.get("status") or "open")
-            status = str(status_raw).lower().strip() if status_raw is not None else "open"
+            # Status: prefer explicit `status` field; fall back to `is_open` bool.
+            status_raw = r.get("status")
+            if status_raw is None:
+                status_raw = "open" if (r.get("is_open") or r.get("isOpen")) else "open"
+            status = str(status_raw).lower().strip()
             priority = bool(
                 r.get("priority") or r.get("is_priority") or r.get("isPriority") or
                 status == "priority"
